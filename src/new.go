@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func main() {
+func sda() {
 	fmt.Println("Calling API...")
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "https://backend-farm.plantvsundead.com/farms?limit=10&offset=0", nil)
