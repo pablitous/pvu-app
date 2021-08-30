@@ -36,7 +36,7 @@ func farms(farmId string) string {
 	limit := []string{"limit", "10"}
 	offset := []string{"offset", "0"}
 	header := [][]string{limit, offset}
-	farms := api(urlFarms, "GET", token, "", nil, header)
+	farms := api(urlFarms, "GET", token, "", header)
 	//fmt.Println(string(myTools))
 	return string(farms)
 }
