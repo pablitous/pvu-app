@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"utils"
 
 	"github.com/tidwall/gjson"
 )
@@ -22,7 +23,8 @@ func main() {
 	farmUrl = "https://backend-farm-stg.plantvsundead.com"
 	farmStatus := farmStatus()
 	isMyTurn := gjson.Get(farmStatus, "data.status")
-	if isMyTurn.String() != "1" {
+	if isMyTurn.String() == "1" {
+
 		myFarm := farms("")
 		//myFarm = testvars.TestFarms
 		plantIds := gjson.Get(myFarm, "data.#._id")
@@ -30,31 +32,61 @@ func main() {
 		plantIds.ForEach(func(key, value gjson.Result) bool {
 			plantId := value.String()
 			needWater := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".needWater").String()
-			if needWater == "true" {
-				fmt.Println("Plant " + plantId + " needs water")
-				rand.Seed(time.Now().UnixNano())
-				n := rand.Intn(10)
-				time.Sleep(time.Duration(n) * time.Second)
-				fmt.Printf("Waiting %d seconds...\n", n)
-				applyTool := applyTool(plantId)
-				if applyTool != true {
-					fmt.Println("Water has been applied to " + plantId)
-				}
-			} else {
-				fmt.Println("Plant " + plantId + " doesn´t need water")
-			}
+			fixWater(plantId, needWater)
+			hasCrow := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".hasCrow").String()
+			fixCrow(plantId, hasCrow)
 			countPlants += 1
 			return true // keep iterating
-
 		})
-
 		//idPlant := len(gjson.Get(myFarm, "data.0._id"))
 		//fmt.Println(idPlant.String())
+	} else {
+		const (
+			RFC3339Nano = "2006-01-02T15:04:05.999999999Z07:00"
+		)
+		t, _ := time.Parse(RFC3339Nano, gjson.Get(farmStatus, "data.nextGroup").String())
+		turnTime := t.Add(time.Hour * -3).String()
+		fmt.Println("Not your turn, turn at " + utils.Substr(turnTime, 0, len(turnTime)-14))
 	}
 
 	//applyTool("612a41891cd86b000992c675")
 }
-
+func fixWater(plantId string, needWater string) bool {
+	var message string
+	if needWater == "true" {
+		fmt.Println("Plant " + plantId + " needs water")
+		rand.Seed(time.Now().UnixNano())
+		n := rand.Intn(10)
+		time.Sleep(time.Duration(n) * time.Second)
+		fmt.Printf("Waiting %d seconds...\n", n)
+		applyToolWater := applyToolWater(plantId)
+		if applyToolWater != true {
+			message = "Water has been applied to " + plantId
+		}
+	} else {
+		message = "Plant " + plantId + " doesn´t need water"
+	}
+	fmt.Println(message)
+	return true
+}
+func fixCrow(plantId string, hasCrow string) bool {
+	var message string
+	if hasCrow == "true" {
+		fmt.Println("Plant " + plantId + " has a crow and needs to be scared")
+		rand.Seed(time.Now().UnixNano())
+		n := rand.Intn(10)
+		time.Sleep(time.Duration(n) * time.Second)
+		fmt.Printf("Waiting %d seconds...\n", n)
+		applyToolScarecrow := applyToolScareCrow(plantId)
+		if applyToolScarecrow != true {
+			message = "Crow has been scared in " + plantId
+		}
+	} else {
+		message = "Plant " + plantId + " doesn´t have a crow"
+	}
+	fmt.Println(message)
+	return true
+}
 func hasWatter() bool {
 	myTools := myTools()
 	//myTools = testvars.TestTools
@@ -80,6 +112,7 @@ func farmStatus() string {
 	farms := api(urlFarms, "GET", token, "", nil)
 	return string(farms)
 }
+
 func farms(farmId string) string {
 	urlFarms := farmUrl + "/farms"
 	if farmId != "" {
@@ -93,21 +126,35 @@ func farms(farmId string) string {
 	return string(farms)
 }
 
-func applyTool(farmId string) bool {
+func applyTool(farmId string, toolId int) bool {
+	counter := 1
 	urlApplyTool := farmUrl + "/farms/apply-tool"
 	limit := []string{"limit", "10"}
 	offset := []string{"offset", "0"}
 	header := [][]string{limit, offset}
-	applyTool := api(urlApplyTool, "POST", token, `{"farmId":"`+farmId+`","toolId":3,"token":{"challenge":"default","seccode":"default","validate":"default"}}`, header)
-	//fmt.Println(string(applyTool))
-	//return string(applyTool)
-	state := gjson.Get(applyTool, "status").Int()
+	appliedTool := api(urlApplyTool, "POST", token, `{"farmId":"`+farmId+`","toolId":`+strconv.Itoa(toolId)+`,"token":{"challenge":"default","seccode":"default","validate":"default"}}`, header)
+	state := gjson.Get(appliedTool, "status").Int()
 	if state == 200 {
 		return true
 	} else {
-		return false
+		if counter == 5 {
+			fmt.Println("No se pudo regar la planta " + farmId)
+			return false
+		} else {
+			counter++
+			return applyTool(farmId, toolId)
+		}
+
 	}
 
+}
+
+func applyToolWater(plantId string) bool {
+	return applyTool(plantId, 3)
+}
+
+func applyToolScareCrow(plantId string) bool {
+	return applyTool(plantId, 4)
 }
 
 func buyTools(toolId int, cant int) string {
@@ -138,7 +185,6 @@ func api(url string, method string, token string, rawBody string, headers [][]st
 		for _, element := range headers {
 			request.Header.Set(element[0], element[1])
 		}
-
 	}
 	request.Header.Set("Authorization", token)
 	//request.Header.Set("limit", "10")
