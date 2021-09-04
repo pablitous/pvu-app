@@ -51,6 +51,7 @@ func main() {
 
 	//applyTool("612a41891cd86b000992c675")
 }
+
 func fixWater(plantId string, needWater string) bool {
 	var message string
 	if needWater == "true" {
@@ -134,11 +135,11 @@ func applyTool(farmId string, toolId int) bool {
 	header := [][]string{limit, offset}
 	appliedTool := api(urlApplyTool, "POST", token, `{"farmId":"`+farmId+`","toolId":`+strconv.Itoa(toolId)+`,"token":{"challenge":"default","seccode":"default","validate":"default"}}`, header)
 	state := gjson.Get(appliedTool, "status").Int()
-	if state == 200 {
+	fmt.Println(state)
+	if state == 0 {
 		return true
 	} else {
 		if counter == 5 {
-			fmt.Println("No se pudo regar la planta " + farmId)
 			return false
 		} else {
 			counter++
@@ -150,11 +151,23 @@ func applyTool(farmId string, toolId int) bool {
 }
 
 func applyToolWater(plantId string) bool {
-	return applyTool(plantId, 3)
+	if applyTool(plantId, 3) == true {
+		fmt.Println("The plant " + plantId + " has been watered")
+		return true
+	} else {
+		fmt.Println("The plant " + plantId + " has't been watered.")
+		return false
+	}
 }
 
 func applyToolScareCrow(plantId string) bool {
-	return applyTool(plantId, 4)
+	if applyTool(plantId, 4) == true {
+		fmt.Println("The Crow in plant" + plantId + " has been scared")
+		return true
+	} else {
+		fmt.Println("The crown in plant " + plantId + " has't been scared.")
+		return false
+	}
 }
 
 func buyTools(toolId int, cant int) string {
