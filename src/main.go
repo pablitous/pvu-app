@@ -135,7 +135,7 @@ func applyTool(farmId string, toolId int) bool {
 	header := [][]string{limit, offset}
 	appliedTool := api(urlApplyTool, "POST", token, `{"farmId":"`+farmId+`","toolId":`+strconv.Itoa(toolId)+`,"token":{"challenge":"default","seccode":"default","validate":"default"}}`, header)
 	state := gjson.Get(appliedTool, "status").Int()
-	fmt.Println(state)
+	//fmt.Println(state)
 	if state == 0 {
 		return true
 	} else {
