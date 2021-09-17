@@ -21,10 +21,22 @@ var farmUrl string
 func main() {
 	token = os.Args[1]
 	farmUrl = "https://backend-farm-stg.plantvsundead.com"
+	farmUrl = "https://backend-farm.plantvsundead.com"
+	for {
+		fmt.Println("Checking " + time.Now().String())
+		mainLogic()
+		rand.Seed(time.Now().UnixNano())
+		n := utils.RandFloats(5, 20)
+		s := fmt.Sprintf("Waiting %f minutes to check again", n)
+		fmt.Println(s)
+		time.Sleep(time.Duration(n) * time.Minute)
+	}
+}
+
+func mainLogic() bool {
 	farmStatus := farmStatus()
 	isMyTurn := gjson.Get(farmStatus, "data.status")
 	if isMyTurn.String() == "1" {
-
 		myFarm := farms("")
 		//myFarm = testvars.TestFarms
 		plantIds := gjson.Get(myFarm, "data.#._id")
@@ -33,23 +45,24 @@ func main() {
 			plantId := value.String()
 			needWater := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".needWater").String()
 			fixWater(plantId, needWater)
+			fixWater(plantId, needWater)
 			hasCrow := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".hasCrow").String()
 			fixCrow(plantId, hasCrow)
 			countPlants += 1
 			return true // keep iterating
 		})
-		//idPlant := len(gjson.Get(myFarm, "data.0._id"))
-		//fmt.Println(idPlant.String())
+		return true
 	} else {
 		const (
 			RFC3339Nano = "2006-01-02T15:04:05.999999999Z07:00"
 		)
 		t, _ := time.Parse(RFC3339Nano, gjson.Get(farmStatus, "data.nextGroup").String())
+		fmt.Println(farmStatus)
+		//fmt.Println("Not your turn, turn at " + t.String())
 		turnTime := t.Add(time.Hour * -3).String()
-		fmt.Println("Not your turn, turn at " + utils.Substr(turnTime, 0, len(turnTime)-14))
+		fmt.Println("Not your turn, turn at " + utils.Substr(turnTime, 0, len(turnTime)-13))
+		return true
 	}
-
-	//applyTool("612a41891cd86b000992c675")
 }
 
 func fixWater(plantId string, needWater string) bool {
@@ -57,9 +70,9 @@ func fixWater(plantId string, needWater string) bool {
 	if needWater == "true" {
 		fmt.Println("Plant " + plantId + " needs water")
 		rand.Seed(time.Now().UnixNano())
-		n := rand.Intn(10)
+		n := utils.RandFloats(7, 23)
 		time.Sleep(time.Duration(n) * time.Second)
-		fmt.Printf("Waiting %d seconds...\n", n)
+		fmt.Printf("Waiting %f seconds...\n", n)
 		applyToolWater := applyToolWater(plantId)
 		if applyToolWater != true {
 			message = "Water has been applied to " + plantId
@@ -75,9 +88,9 @@ func fixCrow(plantId string, hasCrow string) bool {
 	if hasCrow == "true" {
 		fmt.Println("Plant " + plantId + " has a crow and needs to be scared")
 		rand.Seed(time.Now().UnixNano())
-		n := rand.Intn(10)
+		n := utils.RandFloats(8, 23)
 		time.Sleep(time.Duration(n) * time.Second)
-		fmt.Printf("Waiting %d seconds...\n", n)
+		fmt.Printf("Waiting %f seconds...\n", n)
 		applyToolScarecrow := applyToolScareCrow(plantId)
 		if applyToolScarecrow != true {
 			message = "Crow has been scared in " + plantId
@@ -107,7 +120,6 @@ func hasWatter() bool {
 	}
 }
 
-//https://backend-farm.plantvsundead.com/farms/6127c50f1a8e8c001cb68ba9
 func farmStatus() string {
 	urlFarms := farmUrl + "/farm-status"
 	farms := api(urlFarms, "GET", token, "", nil)
@@ -123,7 +135,6 @@ func farms(farmId string) string {
 	offset := []string{"offset", "0"}
 	header := [][]string{limit, offset}
 	farms := api(urlFarms, "GET", token, "", header)
-	//fmt.Println(string(myTools))
 	return string(farms)
 }
 
@@ -135,7 +146,6 @@ func applyTool(farmId string, toolId int) bool {
 	header := [][]string{limit, offset}
 	appliedTool := api(urlApplyTool, "POST", token, `{"farmId":"`+farmId+`","toolId":`+strconv.Itoa(toolId)+`,"token":{"challenge":"default","seccode":"default","validate":"default"}}`, header)
 	state := gjson.Get(appliedTool, "status").Int()
-	//fmt.Println(state)
 	if state == 0 {
 		return true
 	} else {
@@ -145,9 +155,7 @@ func applyTool(farmId string, toolId int) bool {
 			counter++
 			return applyTool(farmId, toolId)
 		}
-
 	}
-
 }
 
 func applyToolWater(plantId string) bool {
@@ -177,6 +185,15 @@ func buyTools(toolId int, cant int) string {
 	return string(buyTools)
 }
 
+/*
+https://backend-farm-stg.plantvsundead.com/captcha/register
+{"status":0,"data":{"success":1,"gt":"1cdfea3c7b83a82af061a8076f8b1c9e","challenge":"ccae7d580e059683937ba09fed154a94","new_captcha":true}}
+{"status":0,"data":{"success":1,"gt":"1cdfea3c7b83a82af061a8076f8b1c9e","challenge":"d40b7fba8307059b6c8d64dd0d5baa36","new_captcha":true}}
+https://backend-farm-stg.plantvsundead.com/captcha/validate
+{"challenge":"d40b7fba8307059b6c8d64dd0d5baa36","seccode":"f4ee69e8f1bc28d7c48e1756ac6ce427|jordan","validate":"f4ee69e8f1bc28d7c48e1756ac6ce427"}
+https://backend-farm-stg.plantvsundead.com/farms/apply-tool
+{"farmId":"613761742de5f90012415364","toolId":3,"token":{"challenge":"d40b7fba8307059b6c8d64dd0d5baa36","seccode":"f4ee69e8f1bc28d7c48e1756ac6ce427|jordan","validate":"f4ee69e8f1bc28d7c48e1756ac6ce427"}}
+*/
 func buySunflowers(toolId int, cant int) string {
 	urlBuyTools := farmUrl + "/farms/buy-sunflowers"
 	buyTools := api(urlBuyTools, "POST", token, `{"amount":`+strconv.Itoa(cant)+`,"toolId":`+strconv.Itoa(toolId)+`}`, nil)
@@ -186,12 +203,35 @@ func buySunflowers(toolId int, cant int) string {
 func myTools() string {
 	urlMyTools := farmUrl + "/farms/my-tools"
 	myTools := api(urlMyTools, "GET", token, "", nil)
-	//fmt.Println(string(myTools))
 	return string(myTools)
 }
 
-func api(url string, method string, token string, rawBody string, headers [][]string) string {
+func getWorldTreeReward(n int) string {
+	urlGetWorldTreeReward := farmUrl + "/world-tree/claim-reward"
+	worldTreeReward := api(urlGetWorldTreeReward, "POST", token, `{"type":3}`, nil)
+	return string(worldTreeReward)
+}
 
+func getWorldTreeData() string {
+	urlGgetWorldTreeData := farmUrl + "/world-tree/datas"
+	worldTreeData := api(urlGgetWorldTreeData, "GET", token, "", nil)
+	return string(worldTreeData)
+}
+
+func giveWatersWorldTree(n int) string {
+	urlGiveWatersWorldTree := farmUrl + "/world-tree/give-waters"
+	giveWatersWorldTree := api(urlGiveWatersWorldTree, "POST", token, `{"amount":`+strconv.Itoa(n)+`}`, nil)
+	return string(giveWatersWorldTree)
+}
+
+func fixWorldTree() {
+	//wolrdTreeData := getWorldTreeData()
+	//rewards := gjson.Get(wolrdTreeData, "data.#.toolId")
+	//gjson.Get(wolrdTreeData, "data."+key.String()+".toolId").Int()
+
+}
+
+func api(url string, method string, token string, rawBody string, headers [][]string) string {
 	var jsonData = []byte(rawBody)
 	request, _ := http.NewRequest(method, url, bytes.NewBuffer(jsonData))
 	if len(headers) != 0 {
@@ -200,12 +240,12 @@ func api(url string, method string, token string, rawBody string, headers [][]st
 		}
 	}
 	request.Header.Set("Authorization", token)
-	//request.Header.Set("limit", "10")
-	//request.Header.Set("offset", "0")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json, text/plain, */*")
 	request.Header.Set("host", "https://marketplace.plantvsundead.com")
 	request.Header.Set("referer", "https://marketplace.plantvsundead.com")
+	request.Header.Set("cache-control", "no-cache")
+	request.Header.Set("pragma", "no-cache")
 	request.Header.Set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36")
 	client := &http.Client{}
 	response, err := client.Do(request)
@@ -214,6 +254,5 @@ func api(url string, method string, token string, rawBody string, headers [][]st
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	return string(body)
 }
