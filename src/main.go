@@ -43,14 +43,36 @@ func mainLogic() bool {
 		var countPlants int
 		plantIds.ForEach(func(key, value gjson.Result) bool {
 			plantId := value.String()
+			stage := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".stage").String()
+			totalHarvest := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".totalHarvest").Int()
 			needWater := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".needWater").String()
-			fixWater(plantId, needWater)
-			fixWater(plantId, needWater)
+			if stage == "new" {
+				fmt.Println("Plant " + plantId + " is new and a new Pot needs to be added")
+				utils.AddRandomSleep(7, 23)
+				applyToolSmallPot(plantId)
+			}
+			fixWater(plantId, needWater, stage)
+			fixWater(plantId, needWater, stage)
 			hasCrow := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".hasCrow").String()
 			fixCrow(plantId, hasCrow)
+			isTempPlant := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".isTempPlant").Bool()
+			if stage == "cancelled" && totalHarvest != 0 {
+				fmt.Println("Plant " + plantId + " needs to be harvested")
+				utils.AddRandomSleep(7, 23)
+				harvestPlant := harvestPlant(plantId)
+				if harvestPlant && isTempPlant != true {
+					fmt.Println("Plant " + plantId + " needs to be removed")
+					utils.AddRandomSleep(7, 23)
+					removePlant(plantId)
+				}
+			}
+			if stage == "cancelled" && totalHarvest == 0 {
+				removePlant(plantId)
+			}
 			countPlants += 1
 			return true // keep iterating
 		})
+		checkFreeSpotsAndAddNewPlants()
 		return true
 	} else {
 		const (
@@ -65,14 +87,90 @@ func mainLogic() bool {
 	}
 }
 
-func fixWater(plantId string, needWater string) bool {
+func checkFreeSpotsAndAddNewPlants() bool {
+	urlLands := farmUrl + "/my-lands"
+	//fmt.Println(urlHarvest)
+	limit := []string{"limit", "10"}
+	offset := []string{"offset", "0"}
+	header := [][]string{limit, offset}
+	lands := api(urlLands, "GET", token, "", header)
+	//addNewPlant()
+	//return lands
+	status := gjson.Get(lands, "status").Int()
+	landIds := gjson.Get(lands, "data.#._id")
+	var countLands int
+	if status == 0 {
+		landIds.ForEach(func(key, value gjson.Result) bool {
+			landId := gjson.Get(lands, "data."+strconv.Itoa(countLands)+".land.landId").String()
+			capacityPlant := gjson.Get(lands, "data."+strconv.Itoa(countLands)+".land.capacity.plant").String()
+			capacityMotherTree := gjson.Get(lands, "data."+strconv.Itoa(countLands)+".land.capacity.motherTree").String()
+			totalFarmingPlant := gjson.Get(lands, "data."+strconv.Itoa(countLands)+".totalFarming.plant").String()
+			totalFarmingMotherTree := gjson.Get(lands, "data."+strconv.Itoa(countLands)+".totalFarming.motherTree").String()
+			countLands += 1
+			if capacityMotherTree > totalFarmingMotherTree {
+				addNewPlant(landId, 2)
+				fmt.Println("A new mama has been added to land " + landId)
+			}
+			if capacityPlant > totalFarmingPlant {
+				if addNewPlant(landId, 1) {
+					fmt.Println("A new sappling has been added to land " + landId)
+				}
+			}
+			//fmt.Println(landId + " - " + capacityPlant + " - " + capacityMotherTree + " - " + totalFarmingPlant + " - " + totalFarmingMotherTree + " - ")
+			return true // keep iterating
+		})
+	}
+	return true
+}
+
+func addNewPlant(landId string, sunflowerId int) bool {
+	//https://backend-farm.plantvsundead.com/farms
+	//{"landId": 0,"sunflowerId": 1}
+	urlAddPlant := farmUrl + "/farms"
+	payload := `{"landId":` + landId + `,"sunflowerId":` + strconv.Itoa(sunflowerId) + `}`
+	addPlant := api(urlAddPlant, "POST", token, payload, nil)
+	if gjson.Get(addPlant, "status").Int() == 0 {
+		fmt.Println("A new plant has been planted")
+		return true
+	} else {
+		fmt.Println("There was an error planting")
+		return false
+	}
+}
+func harvestPlant(plantId string) bool {
+	urlHarvest := farmUrl + "/farms/" + plantId + "/harvest"
+	//fmt.Println(urlHarvest)
+	harvest := api(urlHarvest, "POST", token, "", nil)
+	//{"status":0,"data":{"amount":250}}
+	status := gjson.Get(harvest, "status").Int()
+	amount := gjson.Get(harvest, "data.amount").String()
+	if status == 0 {
+		fmt.Println("Plant " + plantId + " has been harvested and you get: " + amount + " LE")
+		return true
+	} else {
+		fmt.Println("There was an error harvesting plant " + plantId)
+		return false
+	}
+}
+
+func removePlant(plantId string) bool {
+	urlHarvest := farmUrl + "/farms/" + plantId + "/deactivate"
+	harvest := api(urlHarvest, "POST", token, "", nil)
+	//{"status":0,"data":{"amount":250}}
+	status := gjson.Get(harvest, "status").Int()
+	if status == 0 {
+		fmt.Println("Plant " + plantId + " has been removed.")
+	} else {
+		fmt.Println("There was an error removing plant " + plantId)
+	}
+	return true
+}
+
+func fixWater(plantId string, needWater string, stage string) bool {
 	var message string
-	if needWater == "true" {
+	if needWater == "true" && stage != "cancelled" {
 		fmt.Println("Plant " + plantId + " needs water")
-		rand.Seed(time.Now().UnixNano())
-		n := utils.RandFloats(7, 23)
-		time.Sleep(time.Duration(n) * time.Second)
-		fmt.Printf("Waiting %f seconds...\n", n)
+		utils.AddRandomSleep(7, 23)
 		applyToolWater := applyToolWater(plantId)
 		if applyToolWater != true {
 			message = "Water has been applied to " + plantId
@@ -87,10 +185,7 @@ func fixCrow(plantId string, hasCrow string) bool {
 	var message string
 	if hasCrow == "true" {
 		fmt.Println("Plant " + plantId + " has a crow and needs to be scared")
-		rand.Seed(time.Now().UnixNano())
-		n := utils.RandFloats(8, 23)
-		time.Sleep(time.Duration(n) * time.Second)
-		fmt.Printf("Waiting %f seconds...\n", n)
+		utils.AddRandomSleep(8, 23)
 		applyToolScarecrow := applyToolScareCrow(plantId)
 		if applyToolScarecrow != true {
 			message = "Crow has been scared in " + plantId
@@ -138,8 +233,12 @@ func farms(farmId string) string {
 	return string(farms)
 }
 
+var counter int
+
 func applyTool(farmId string, toolId int) bool {
-	counter := 1
+	if counter > 5 {
+		counter = 1
+	}
 	urlApplyTool := farmUrl + "/farms/apply-tool"
 	limit := []string{"limit", "10"}
 	offset := []string{"offset", "0"}
@@ -149,6 +248,11 @@ func applyTool(farmId string, toolId int) bool {
 	if state == 0 {
 		return true
 	} else {
+		fmt.Println(appliedTool)
+		/*
+			if status 556
+			ask for register y solucionar captcha
+		*/
 		if counter == 5 {
 			return false
 		} else {
@@ -174,6 +278,29 @@ func applyToolScareCrow(plantId string) bool {
 		return true
 	} else {
 		fmt.Println("The crown in plant " + plantId + " has't been scared.")
+		return false
+	}
+}
+
+func applyToolSmallPot(plantId string) bool {
+	/*
+		preungar si tengo macetas, si no tengo, hay q ir a comprarlas
+	*/
+	if applyTool(plantId, 1) == true {
+		fmt.Println("The small pot has been added to plant" + plantId)
+		return true
+	} else {
+		fmt.Println("There was an error adding the small pot")
+		return false
+	}
+}
+
+func applyToolBigPot(plantId string) bool {
+	if applyTool(plantId, 2) == true {
+		fmt.Println("The big pot has been added to plant" + plantId)
+		return true
+	} else {
+		fmt.Println("There was an error adding the big pot")
 		return false
 	}
 }
