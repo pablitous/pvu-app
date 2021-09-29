@@ -56,11 +56,12 @@ func mainLogic() bool {
 			hasCrow := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".hasCrow").String()
 			fixCrow(plantId, hasCrow)
 			isTempPlant := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".isTempPlant").Bool()
-			if stage == "cancelled" && totalHarvest != 0 {
+			//if stage == "cancelled" && totalHarvest != 0 {
+			if totalHarvest != 0 {
 				fmt.Println("Plant " + plantId + " needs to be harvested")
 				utils.AddRandomSleep(7, 23)
 				harvestPlant := harvestPlant(plantId)
-				if harvestPlant && isTempPlant != true {
+				if harvestPlant && stage == "cancelled" && isTempPlant != true {
 					fmt.Println("Plant " + plantId + " needs to be removed")
 					utils.AddRandomSleep(7, 23)
 					removePlant(plantId)
@@ -73,6 +74,7 @@ func mainLogic() bool {
 			return true // keep iterating
 		})
 		checkFreeSpotsAndAddNewPlants()
+		doWorldTree()
 		return true
 	} else {
 		const (
@@ -335,7 +337,9 @@ func myTools() string {
 
 func getWorldTreeReward(n int) string {
 	urlGetWorldTreeReward := farmUrl + "/world-tree/claim-reward"
-	worldTreeReward := api(urlGetWorldTreeReward, "POST", token, `{"type":3}`, nil)
+	utils.AddRandomSleep(3, 12)
+	worldTreeReward := api(urlGetWorldTreeReward, "POST", token, `{"type":`+strconv.Itoa(n)+`}`, nil)
+	fmt.Println("Reward " + strconv.Itoa(n) + " has been taken")
 	return string(worldTreeReward)
 }
 
@@ -347,13 +351,45 @@ func getWorldTreeData() string {
 
 func giveWatersWorldTree(n int) string {
 	urlGiveWatersWorldTree := farmUrl + "/world-tree/give-waters"
+	utils.AddRandomSleep(3, 12)
 	giveWatersWorldTree := api(urlGiveWatersWorldTree, "POST", token, `{"amount":`+strconv.Itoa(n)+`}`, nil)
+	fmt.Println(strconv.Itoa(n) + " waters were given to the World Tree")
 	return string(giveWatersWorldTree)
 }
 
-func fixWorldTree() {
-	//wolrdTreeData := getWorldTreeData()
-	//rewards := gjson.Get(wolrdTreeData, "data.#.toolId")
+func getWorldTreeYesterdayReward() string {
+	urlWorldTreeYesterdayReward := farmUrl + "/world-tree/claim-yesterday-reward"
+	utils.AddRandomSleep(7, 23)
+	worldTreeYesterdayReward := api(urlWorldTreeYesterdayReward, "POST", token, "", nil)
+	fmt.Println("Reward from yesterday has been taken")
+	return string(worldTreeYesterdayReward)
+}
+
+func doWorldTree() {
+	wolrdTreeData := getWorldTreeData()
+	yesterdayReward := gjson.Get(wolrdTreeData, "data.yesterdayReward").Bool()
+	if yesterdayReward {
+		getWorldTreeYesterdayReward()
+	}
+	myWater := gjson.Get(wolrdTreeData, "data.myWater").Int()
+	if myWater < 20 {
+		giveWatersWorldTree(20)
+		wolrdTreeData = getWorldTreeData()
+	}
+	rewardAvailable := gjson.Get(wolrdTreeData, "data.rewardAvailable").Bool()
+	if rewardAvailable {
+		rewardIds := gjson.Get(wolrdTreeData, "data.reward.#.type")
+		rewardIds.ForEach(func(key, value gjson.Result) bool {
+			rewardStatus := gjson.Get(wolrdTreeData, "data.reward."+strconv.Itoa(int(value.Int())-1)+".status").String()
+			if rewardStatus == "finish" {
+				getWorldTreeReward(int(value.Int()))
+			} else if rewardStatus == "notfinish" {
+				fmt.Println("Reward " + value.String() + " has not been finished yet")
+			}
+			return true
+		})
+	}
+
 	//gjson.Get(wolrdTreeData, "data."+key.String()+".toolId").Int()
 
 }
