@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io/ioutil"
@@ -19,9 +20,23 @@ var token string
 var farmUrl string
 
 func main() {
-	token = os.Args[1]
-	farmUrl = "https://backend-farm-stg.plantvsundead.com"
-	farmUrl = "https://backend-farm.plantvsundead.com"
+	//token = os.Args[1]
+	fmt.Println("Ingrese su token por favor ")
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		token = scanner.Text()
+	}
+	fmt.Println("Ingrese 1 si la url hoy es https://backend-farm-stg.plantvsundead.com, si la url es https://backend-farm.plantvsundead.com presione otro numero")
+	fmt.Println("1 si la url hoy es https://backend-farm.plantvsundead.com")
+	fmt.Println("2 si la url hoy es https://backend-farm-stg.plantvsundead.com")
+	var farmUrlId int
+	fmt.Scanln(&farmUrlId)
+	if farmUrlId == 2 {
+		farmUrl = "https://backend-farm-stg.plantvsundead.com"
+	} else {
+		farmUrl = "https://backend-farm.plantvsundead.com"
+	}
+
 	for {
 		fmt.Println("Checking " + time.Now().String())
 		mainLogic()
@@ -377,18 +392,23 @@ func doWorldTree() {
 		wolrdTreeData = getWorldTreeData()
 	}
 	rewardAvailable := gjson.Get(wolrdTreeData, "data.rewardAvailable").Bool()
+	totalWatersNow := gjson.Get(wolrdTreeData, "data.totalWater").String()
 	if rewardAvailable {
 		rewardIds := gjson.Get(wolrdTreeData, "data.reward.#.type")
 		rewardIds.ForEach(func(key, value gjson.Result) bool {
 			rewardStatus := gjson.Get(wolrdTreeData, "data.reward."+strconv.Itoa(int(value.Int())-1)+".status").String()
+			targetWaters := gjson.Get(wolrdTreeData, "data.reward."+strconv.Itoa(int(value.Int())-1)+".target").String()
 			if rewardStatus == "finish" {
 				getWorldTreeReward(int(value.Int()))
 			} else if rewardStatus == "notfinish" {
-				fmt.Println("Reward " + value.String() + " has not been finished yet")
+				fmt.Println("Reward " + value.String() + " has not been finished yet. " + totalWatersNow + "/" + targetWaters)
+				return false
 			}
 			return true
 		})
+
 	}
+	gjson.Get(wolrdTreeData, "data.totalWater").String()
 
 	//gjson.Get(wolrdTreeData, "data."+key.String()+".toolId").Int()
 
