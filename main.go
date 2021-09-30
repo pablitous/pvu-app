@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -19,22 +20,32 @@ import (
 var token string
 var farmUrl string
 
+type BasicInfo struct {
+	Token   string `json:"token"`
+	FarmUrl string `json:"farmUrl"`
+}
+
 func main() {
 	//token = os.Args[1]
-	fmt.Println("Ingrese su token por favor ")
 	scanner := bufio.NewScanner(os.Stdin)
-	if scanner.Scan() {
-		token = scanner.Text()
-	}
-	fmt.Println("Ingrese 1 si la url hoy es https://backend-farm-stg.plantvsundead.com, si la url es https://backend-farm.plantvsundead.com presione otro numero")
-	fmt.Println("1 si la url hoy es https://backend-farm.plantvsundead.com")
-	fmt.Println("2 si la url hoy es https://backend-farm-stg.plantvsundead.com")
-	var farmUrlId int
-	fmt.Scanln(&farmUrlId)
-	if farmUrlId == 2 {
-		farmUrl = "https://backend-farm-stg.plantvsundead.com"
+	fileBasicInfo, err := os.Open("BasicInfo.json")
+	if err != nil {
+		fmt.Println("First Login, please complete the parameters.")
+		updateParameters()
 	} else {
-		farmUrl = "https://backend-farm.plantvsundead.com"
+		fmt.Println("Parameters already exists, do you want to change them? (y/n)")
+		if scanner.Scan() {
+			updateParametersYesNo := scanner.Text()
+			if updateParametersYesNo == "y" {
+				updateParameters()
+			} else {
+				basicInfoJson, _ := ioutil.ReadAll(fileBasicInfo)
+				var loginData BasicInfo
+				json.Unmarshal(basicInfoJson, &loginData)
+				token = loginData.Token
+				farmUrl = loginData.FarmUrl
+			}
+		}
 	}
 
 	for {
@@ -43,9 +54,34 @@ func main() {
 		rand.Seed(time.Now().UnixNano())
 		n := utils.RandFloats(5, 20)
 		s := fmt.Sprintf("Waiting %f minutes to check again", n)
+
 		fmt.Println(s)
 		time.Sleep(time.Duration(n) * time.Minute)
 	}
+}
+func updateParameters() bool {
+	fmt.Println("Ingrese su token por favor ")
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		token = scanner.Text()
+	}
+	fmt.Println("Ingrese el numero de url q se esta utilizando")
+	fmt.Println("1  https://backend-farm.plantvsundead.com")
+	fmt.Println("2  https://backend-farm-stg.plantvsundead.com")
+	var farmUrlId int
+	fmt.Scanln(&farmUrlId)
+	if farmUrlId == 2 {
+		farmUrl = "https://backend-farm-stg.plantvsundead.com"
+	} else {
+		farmUrl = "https://backend-farm.plantvsundead.com"
+	}
+	BasicInfo := BasicInfo{
+		Token:   token,
+		FarmUrl: farmUrl,
+	}
+	file, _ := json.MarshalIndent(BasicInfo, "", " ")
+	_ = ioutil.WriteFile("BasicInfo.json", file, 0644)
+	return true
 }
 
 func mainLogic() bool {
@@ -213,6 +249,7 @@ func fixCrow(plantId string, hasCrow string) bool {
 	fmt.Println(message)
 	return true
 }
+
 func hasWatter() bool {
 	myTools := myTools()
 	//myTools = testvars.TestTools
@@ -226,6 +263,25 @@ func hasWatter() bool {
 		return true
 	})
 	if waters > 0 {
+		return true
+	} else {
+		return false
+	}
+}
+
+func hasTool(toolIdCheck int) bool {
+	myTools := myTools()
+	//myTools = testvars.TestTools
+	var tool int64
+	myToolsId := gjson.Get(myTools, "data.#.toolId")
+	myToolsId.ForEach(func(key, value gjson.Result) bool {
+		toolId := gjson.Get(myTools, "data."+key.String()+".toolId").Int()
+		if int(toolId) == toolIdCheck {
+			tool = gjson.Get(myTools, "data."+key.String()+".usages").Int()
+		}
+		return true
+	})
+	if tool > 0 {
 		return true
 	} else {
 		return false
@@ -252,7 +308,7 @@ func farms(farmId string) string {
 
 var counter int
 
-func applyTool(farmId string, toolId int) bool {
+func applyTool(farmId string, toolId int, captchaInfo string) bool {
 	if counter > 5 {
 		counter = 1
 	}
@@ -260,27 +316,78 @@ func applyTool(farmId string, toolId int) bool {
 	limit := []string{"limit", "10"}
 	offset := []string{"offset", "0"}
 	header := [][]string{limit, offset}
-	appliedTool := api(urlApplyTool, "POST", token, `{"farmId":"`+farmId+`","toolId":`+strconv.Itoa(toolId)+`,"token":{"challenge":"default","seccode":"default","validate":"default"}}`, header)
+	tokenCaptcha := `{"challenge":"default","seccode":"default","validate":"default"}`
+	if captchaInfo != "" {
+		tokenCaptcha = captchaInfo
+	}
+	fmt.Println(tokenCaptcha)
+	appliedTool := api(urlApplyTool, "POST", token, `{"farmId":"`+farmId+`","toolId":`+strconv.Itoa(toolId)+`,"token":`+tokenCaptcha+`}`, header)
 	state := gjson.Get(appliedTool, "status").Int()
 	if state == 0 {
 		return true
+	} else if state == 20 {
+		fmt.Println("Plant already has 2 waters")
+		return true
 	} else {
-		fmt.Println(appliedTool)
-		/*
-			if status 556
-			ask for register y solucionar captcha
-		*/
+		if state == 556 {
+			captchaSolved := fixCaptcha()
+			applyTool(farmId, toolId, captchaSolved)
+			//fmt.Println("Solving Captcha")
+			return true
+		}
 		if counter == 5 {
 			return false
 		} else {
 			counter++
-			return applyTool(farmId, toolId)
+			return applyTool(farmId, toolId, "")
 		}
 	}
 }
+func fixCaptcha() string {
+	var captchaSolution string
+	key2Captcha := "0865e8ccc6d546acc46ecff9f1b17ffc"
+	urlNewCaptcha := farmUrl + "/captcha/register"
+	newCaptcha := api(urlNewCaptcha, "GET", token, "", nil)
+	if gjson.Get(newCaptcha, "status").Int() == 0 {
+		gt := gjson.Get(newCaptcha, "data.gt").String()
+		challenge := gjson.Get(newCaptcha, "data.challenge").String()
+		//fmt.Println(gt + " - " + challenge)
+
+		url2Captcha := "http://2captcha.com/in.php?key=" + key2Captcha + "&method=geetest&json=1&gt=" + gt + "&challenge=" + challenge + "&pageurl=" + farmUrl
+		solutionId2Captcha := api(url2Captcha, "POST", "", "", nil)
+		if gjson.Get(solutionId2Captcha, "status").Int() == 1 {
+			requestId := gjson.Get(solutionId2Captcha, "request").String()
+			utils.AddRandomSleep(15, 20)
+			urlGet2CaptchaSolution := "http://2captcha.com/res.php?key=" + key2Captcha + "&action=get&json=1&id=" + requestId
+			get2CaptchaSolution := Get2CaptchaSolution(urlGet2CaptchaSolution)
+			challenge = gjson.Get(get2CaptchaSolution, "request.geetest_challenge").String()
+			seccode := gjson.Get(get2CaptchaSolution, "request.geetest_seccode").String()
+			validate := gjson.Get(get2CaptchaSolution, "request.geetest_validate").String()
+			captchaSolution = `{"challenge":"` + challenge + `","seccode":"` + seccode + `","validate":"` + validate + `"}`
+			urlValidateCaptcha := farmUrl + "/captcha/validate"
+			valitateCaptcha := api(urlValidateCaptcha, "POST", token, captchaSolution, nil)
+			utils.AddRandomSleep(0, 1)
+			statusValdiateCaptcha := gjson.Get(valitateCaptcha, "status").Int()
+			if statusValdiateCaptcha == 0 {
+				return captchaSolution
+			}
+		}
+	}
+
+	return captchaSolution
+}
+func Get2CaptchaSolution(urlGet2CaptchaSolution string) string {
+	get2CaptchaSolution := api(urlGet2CaptchaSolution, "POST", "", "", nil)
+	request := gjson.Get(get2CaptchaSolution, "request").String()
+	if request == "CAPCHA_NOT_READY" {
+		utils.AddRandomSleep(4, 7)
+		get2CaptchaSolution = Get2CaptchaSolution(urlGet2CaptchaSolution)
+	}
+	return get2CaptchaSolution
+}
 
 func applyToolWater(plantId string) bool {
-	if applyTool(plantId, 3) == true {
+	if applyTool(plantId, 3, "") == true {
 		fmt.Println("The plant " + plantId + " has been watered")
 		return true
 	} else {
@@ -290,7 +397,7 @@ func applyToolWater(plantId string) bool {
 }
 
 func applyToolScareCrow(plantId string) bool {
-	if applyTool(plantId, 4) == true {
+	if applyTool(plantId, 4, "") == true {
 		fmt.Println("The Crow in plant" + plantId + " has been scared")
 		return true
 	} else {
@@ -300,10 +407,13 @@ func applyToolScareCrow(plantId string) bool {
 }
 
 func applyToolSmallPot(plantId string) bool {
-	/*
-		preungar si tengo macetas, si no tengo, hay q ir a comprarlas
-	*/
-	if applyTool(plantId, 1) == true {
+	if !hasTool(1) {
+		fmt.Print("Buying a Small Pot")
+		utils.AddRandomSleep(3, 7)
+		buyTools(1, 1)
+	}
+	utils.AddRandomSleep(3, 7)
+	if applyTool(plantId, 1, "") == true {
 		fmt.Println("The small pot has been added to plant" + plantId)
 		return true
 	} else {
@@ -313,7 +423,7 @@ func applyToolSmallPot(plantId string) bool {
 }
 
 func applyToolBigPot(plantId string) bool {
-	if applyTool(plantId, 2) == true {
+	if applyTool(plantId, 2, "") == true {
 		fmt.Println("The big pot has been added to plant" + plantId)
 		return true
 	} else {
@@ -323,7 +433,7 @@ func applyToolBigPot(plantId string) bool {
 }
 
 func buyTools(toolId int, cant int) string {
-	urlBuyTools := farmUrl + "/farms/buy-tools"
+	urlBuyTools := farmUrl + "/buy-tools"
 	buyTools := api(urlBuyTools, "POST", token, `{"amount":`+strconv.Itoa(cant)+`,"toolId":`+strconv.Itoa(toolId)+`}`, nil)
 	//fmt.Println(string(buyTools))
 	return string(buyTools)
@@ -339,13 +449,13 @@ https://backend-farm-stg.plantvsundead.com/farms/apply-tool
 {"farmId":"613761742de5f90012415364","toolId":3,"token":{"challenge":"d40b7fba8307059b6c8d64dd0d5baa36","seccode":"f4ee69e8f1bc28d7c48e1756ac6ce427|jordan","validate":"f4ee69e8f1bc28d7c48e1756ac6ce427"}}
 */
 func buySunflowers(toolId int, cant int) string {
-	urlBuyTools := farmUrl + "/farms/buy-sunflowers"
+	urlBuyTools := farmUrl + "/buy-sunflowers"
 	buyTools := api(urlBuyTools, "POST", token, `{"amount":`+strconv.Itoa(cant)+`,"toolId":`+strconv.Itoa(toolId)+`}`, nil)
 	return string(buyTools)
 }
 
 func myTools() string {
-	urlMyTools := farmUrl + "/farms/my-tools"
+	urlMyTools := farmUrl + "/my-tools"
 	myTools := api(urlMyTools, "GET", token, "", nil)
 	return string(myTools)
 }
@@ -408,10 +518,8 @@ func doWorldTree() {
 		})
 
 	}
-	gjson.Get(wolrdTreeData, "data.totalWater").String()
-
+	//gjson.Get(wolrdTreeData, "data.totalWater").String()
 	//gjson.Get(wolrdTreeData, "data."+key.String()+".toolId").Int()
-
 }
 
 func api(url string, method string, token string, rawBody string, headers [][]string) string {
@@ -422,7 +530,9 @@ func api(url string, method string, token string, rawBody string, headers [][]st
 			request.Header.Set(element[0], element[1])
 		}
 	}
-	request.Header.Set("Authorization", token)
+	if token != "" {
+		request.Header.Set("Authorization", token)
+	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json, text/plain, */*")
 	request.Header.Set("host", "https://marketplace.plantvsundead.com")
