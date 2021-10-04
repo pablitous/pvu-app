@@ -179,6 +179,15 @@ func checkFreeSpotsAndAddNewPlants() bool {
 func addNewPlant(landId string, sunflowerId int) bool {
 	//https://backend-farm.plantvsundead.com/farms
 	//{"landId": 0,"sunflowerId": 1}
+	sunflowerAvailability := getSunfloweAvailability(sunflowerId)
+	if !sunflowerAvailability {
+		switch sunflowerId {
+		case 1:
+			buySunflowerSapling(1)
+		case 2:
+			buySunflowerMama(1)
+		}
+	}
 	urlAddPlant := farmUrl + "/farms"
 	payload := `{"landId":` + landId + `,"sunflowerId":` + strconv.Itoa(sunflowerId) + `}`
 	addPlant := api(urlAddPlant, "POST", token, payload, nil)
@@ -190,6 +199,22 @@ func addNewPlant(landId string, sunflowerId int) bool {
 		return false
 	}
 }
+
+func getSunfloweAvailability(sunflowerId int) bool {
+	mySunflowers := getMySunflowers()
+	mySunfloweCount := 0
+	if int(gjson.Get(mySunflowers, "data.0.sunflowerId").Int()) == sunflowerId {
+		mySunfloweCount = int(gjson.Get(mySunflowers, "data.0.usages").Int())
+	} else {
+		mySunfloweCount = int(gjson.Get(mySunflowers, "data.1.usages").Int())
+	}
+	if mySunfloweCount >= 1 {
+		return true
+	} else {
+		return false
+	}
+}
+
 func harvestPlant(plantId string) bool {
 	urlHarvest := farmUrl + "/farms/" + plantId + "/harvest"
 	//fmt.Println(urlHarvest)
@@ -271,14 +296,15 @@ func hasWatter() bool {
 
 func hasTool(toolIdCheck int) bool {
 	myTools := myTools()
-	//myTools = testvars.TestTools
 	var tool int64
 	myToolsId := gjson.Get(myTools, "data.#.toolId")
+	countTool := 0
 	myToolsId.ForEach(func(key, value gjson.Result) bool {
-		toolId := gjson.Get(myTools, "data."+key.String()+".toolId").Int()
+		toolId := gjson.Get(myTools, "data."+strconv.Itoa(countTool)+".toolId").Int()
 		if int(toolId) == toolIdCheck {
-			tool = gjson.Get(myTools, "data."+key.String()+".usages").Int()
+			tool = gjson.Get(myTools, "data."+strconv.Itoa(countTool)+".usages").Int()
 		}
+		countTool += 1
 		return true
 	})
 	if tool > 0 {
@@ -319,8 +345,9 @@ func applyTool(farmId string, toolId int, captchaInfo string) bool {
 	tokenCaptcha := `{"challenge":"default","seccode":"default","validate":"default"}`
 	if captchaInfo != "" {
 		tokenCaptcha = captchaInfo
+		fmt.Println("A captcha has been solved")
 	}
-	fmt.Println(tokenCaptcha)
+	//fmt.Println(tokenCaptcha)
 	appliedTool := api(urlApplyTool, "POST", token, `{"farmId":"`+farmId+`","toolId":`+strconv.Itoa(toolId)+`,"token":`+tokenCaptcha+`}`, header)
 	state := gjson.Get(appliedTool, "status").Int()
 	if state == 0 {
@@ -387,6 +414,13 @@ func Get2CaptchaSolution(urlGet2CaptchaSolution string) string {
 }
 
 func applyToolWater(plantId string) bool {
+	hasTool := hasTool(3)
+	if !hasTool {
+		fmt.Print("Buying Water")
+		utils.AddRandomSleep(3, 7)
+		buyWater(1)
+	}
+	utils.AddRandomSleep(3, 7)
 	if applyTool(plantId, 3, "") == true {
 		fmt.Println("The plant " + plantId + " has been watered")
 		return true
@@ -397,6 +431,13 @@ func applyToolWater(plantId string) bool {
 }
 
 func applyToolScareCrow(plantId string) bool {
+	hasTool := hasTool(4)
+	if !hasTool {
+		fmt.Print("Buying ScareCrow")
+		utils.AddRandomSleep(3, 7)
+		buyScareCrow(1)
+	}
+	utils.AddRandomSleep(3, 7)
 	if applyTool(plantId, 4, "") == true {
 		fmt.Println("The Crow in plant" + plantId + " has been scared")
 		return true
@@ -407,10 +448,11 @@ func applyToolScareCrow(plantId string) bool {
 }
 
 func applyToolSmallPot(plantId string) bool {
-	if !hasTool(1) {
+	hasTool := hasTool(1)
+	if !hasTool {
 		fmt.Print("Buying a Small Pot")
 		utils.AddRandomSleep(3, 7)
-		buyTools(1, 1)
+		buySmallPot(1)
 	}
 	utils.AddRandomSleep(3, 7)
 	if applyTool(plantId, 1, "") == true {
@@ -438,22 +480,88 @@ func buyTools(toolId int, cant int) string {
 	//fmt.Println(string(buyTools))
 	return string(buyTools)
 }
+func buyWater(cant int) bool {
+	leWallet := getLeWallet()
+	if leWallet >= 50*cant {
+		buyTools(3, cant)
+		return true
+	} else {
+		return false
+	}
+}
+func buyScareCrow(cant int) bool {
+	leWallet := getLeWallet()
+	if leWallet >= 20*cant {
+		buyTools(4, cant)
+		return true
+	} else {
+		return false
+	}
+}
+func buySmallPot(cant int) bool {
+	leWallet := getLeWallet()
+	if leWallet >= 100*cant {
+		buyTools(1, cant)
+		return true
+	} else {
+		return false
+	}
+}
 
-/*
-https://backend-farm-stg.plantvsundead.com/captcha/register
-{"status":0,"data":{"success":1,"gt":"1cdfea3c7b83a82af061a8076f8b1c9e","challenge":"ccae7d580e059683937ba09fed154a94","new_captcha":true}}
-{"status":0,"data":{"success":1,"gt":"1cdfea3c7b83a82af061a8076f8b1c9e","challenge":"d40b7fba8307059b6c8d64dd0d5baa36","new_captcha":true}}
-https://backend-farm-stg.plantvsundead.com/captcha/validate
-{"challenge":"d40b7fba8307059b6c8d64dd0d5baa36","seccode":"f4ee69e8f1bc28d7c48e1756ac6ce427|jordan","validate":"f4ee69e8f1bc28d7c48e1756ac6ce427"}
-https://backend-farm-stg.plantvsundead.com/farms/apply-tool
-{"farmId":"613761742de5f90012415364","toolId":3,"token":{"challenge":"d40b7fba8307059b6c8d64dd0d5baa36","seccode":"f4ee69e8f1bc28d7c48e1756ac6ce427|jordan","validate":"f4ee69e8f1bc28d7c48e1756ac6ce427"}}
-*/
+func getFarmingStats() string {
+	//{"status":0,"data":{"totalHarvestable":0,"pvuToFarm":3000000,"seedsToFarm":22000,"pvuMyFarmed":61.21,"seedsMyFarmed":0,"leWallet":960,"usagesSunflower":85}}
+	urlFarmingStats := farmUrl + "/farming-stats"
+	farmingStats := api(urlFarmingStats, "POST", token, "", nil)
+	//fmt.Println(string(buyTools))
+	return string(farmingStats)
+}
+
+func getMySunflowers() string {
+	urlFarmingStats := farmUrl + "/my-sunflowers"
+	farmingStats := api(urlFarmingStats, "POST", token, "", nil)
+	//fmt.Println(string(buyTools))
+	return string(farmingStats)
+}
+
+func getLeWallet() int {
+	farmingStats := getFarmingStats()
+	leWallet := gjson.Get(farmingStats, "data.leWallet").Int()
+	return int(leWallet)
+}
+
 func buySunflowers(toolId int, cant int) string {
 	urlBuyTools := farmUrl + "/buy-sunflowers"
 	buyTools := api(urlBuyTools, "POST", token, `{"amount":`+strconv.Itoa(cant)+`,"toolId":`+strconv.Itoa(toolId)+`}`, nil)
 	return string(buyTools)
 }
 
+func buySunBox(cant int) bool {
+	leWallet := getLeWallet()
+	if leWallet >= 100*cant {
+		buySunflowers(3, cant)
+		return true
+	} else {
+		return false
+	}
+}
+func buySunflowerMama(cant int) bool {
+	leWallet := getLeWallet()
+	if leWallet >= 200*cant {
+		buySunflowers(2, cant)
+		return true
+	} else {
+		return false
+	}
+}
+func buySunflowerSapling(cant int) bool {
+	leWallet := getLeWallet()
+	if leWallet >= 100*cant {
+		buySunflowers(1, cant)
+		return true
+	} else {
+		return false
+	}
+}
 func myTools() string {
 	urlMyTools := farmUrl + "/my-tools"
 	myTools := api(urlMyTools, "GET", token, "", nil)
