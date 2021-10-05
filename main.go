@@ -582,12 +582,18 @@ func getWorldTreeData() string {
 	return string(worldTreeData)
 }
 
-func giveWatersWorldTree(n int) string {
-	urlGiveWatersWorldTree := farmUrl + "/world-tree/give-waters"
-	utils.AddRandomSleep(3, 12)
-	giveWatersWorldTree := api(urlGiveWatersWorldTree, "POST", token, `{"amount":`+strconv.Itoa(n)+`}`, nil)
-	fmt.Println(strconv.Itoa(n) + " waters were given to the World Tree")
-	return string(giveWatersWorldTree)
+func giveWatersWorldTree(n int) bool {
+	if hasWatter() {
+		urlGiveWatersWorldTree := farmUrl + "/world-tree/give-waters"
+		utils.AddRandomSleep(3, 12)
+		api(urlGiveWatersWorldTree, "POST", token, `{"amount":`+strconv.Itoa(n)+`}`, nil)
+		fmt.Println(strconv.Itoa(n) + " waters were given to the World Tree")
+		return true
+	} else {
+		fmt.Println("Couldn`t water the World Tree, no waters availables")
+		return false
+	}
+
 }
 
 func getWorldTreeYesterdayReward() string {
