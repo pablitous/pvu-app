@@ -275,21 +275,24 @@ func fixCrow(plantId string, hasCrow string) bool {
 	return true
 }
 
-func hasWatter() bool {
+func hasWater() bool {
 	myTools := myTools()
 	//myTools = testvars.TestTools
 	var waters int64
 	myToolsId := gjson.Get(myTools, "data.#.toolId")
+	countTools := 0
 	myToolsId.ForEach(func(key, value gjson.Result) bool {
-		toolId := gjson.Get(myTools, "data."+key.String()+".toolId").Int()
+		toolId := gjson.Get(myTools, "data."+strconv.Itoa(countTools)+".toolId").Int()
 		if toolId == 3 {
-			waters = gjson.Get(myTools, "data."+key.String()+".usages").Int()
+			waters = gjson.Get(myTools, "data."+strconv.Itoa(countTools)+".usages").Int()
 		}
+		countTools += 1
 		return true
 	})
-	if waters > 0 {
+	if waters > 20 {
 		return true
 	} else {
+		buyWater(1)
 		return false
 	}
 }
@@ -583,7 +586,7 @@ func getWorldTreeData() string {
 }
 
 func giveWatersWorldTree(n int) bool {
-	if hasWatter() {
+	if hasWater() {
 		urlGiveWatersWorldTree := farmUrl + "/world-tree/give-waters"
 		utils.AddRandomSleep(3, 12)
 		api(urlGiveWatersWorldTree, "POST", token, `{"amount":`+strconv.Itoa(n)+`}`, nil)
