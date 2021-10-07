@@ -503,7 +503,7 @@ func buyScareCrow(cant int) bool {
 }
 func buySmallPot(cant int) bool {
 	leWallet := getLeWallet()
-	if leWallet >= 100*cant {
+	if leWallet >= 50*cant {
 		buyTools(1, cant)
 		return true
 	} else {

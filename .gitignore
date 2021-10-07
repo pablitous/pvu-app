@@ -1,3 +1,4 @@
 noupload/*
 vendor/github.com/*
 BasicInfo.json
+.idea/
