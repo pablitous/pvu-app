@@ -202,13 +202,19 @@ func addNewPlant(landId string, sunflowerId int) bool {
 
 func getSunfloweAvailability(sunflowerId int) bool {
 	mySunflowers := getMySunflowers()
-	mySunfloweCount := 0
-	if int(gjson.Get(mySunflowers, "data.0.sunflowerId").Int()) == sunflowerId {
-		mySunfloweCount = int(gjson.Get(mySunflowers, "data.0.usages").Int())
-	} else {
-		mySunfloweCount = int(gjson.Get(mySunflowers, "data.1.usages").Int())
-	}
-	if mySunfloweCount >= 1 {
+	mySunflowerCount := 0
+	countSunflower := 0
+	mySunflowersId := gjson.Get(mySunflowers, "data.#.plantType")
+	mySunflowersId.ForEach(func(key, value gjson.Result) bool {
+		sunflower := gjson.Get(mySunflowers, "data."+strconv.Itoa(countSunflower)+".plantType").Int()
+		if int(sunflower) == sunflowerId {
+			mySunflowerCount = int(gjson.Get(mySunflowers, "data."+strconv.Itoa(countSunflower)+".usages").Int())
+		}
+		countSunflower += 1
+		return true
+	})
+
+	if mySunflowerCount >= 1 {
 		return true
 	} else {
 		return false
@@ -453,7 +459,7 @@ func applyToolScareCrow(plantId string) bool {
 func applyToolSmallPot(plantId string) bool {
 	hasTool := hasTool(1)
 	if !hasTool {
-		fmt.Print("Buying a Small Pot")
+		fmt.Println("Buying a Small Pot")
 		utils.AddRandomSleep(3, 7)
 		buySmallPot(1)
 	}
@@ -514,14 +520,14 @@ func buySmallPot(cant int) bool {
 func getFarmingStats() string {
 	//{"status":0,"data":{"totalHarvestable":0,"pvuToFarm":3000000,"seedsToFarm":22000,"pvuMyFarmed":61.21,"seedsMyFarmed":0,"leWallet":960,"usagesSunflower":85}}
 	urlFarmingStats := farmUrl + "/farming-stats"
-	farmingStats := api(urlFarmingStats, "POST", token, "", nil)
+	farmingStats := api(urlFarmingStats, "GET", token, "", nil)
 	//fmt.Println(string(buyTools))
 	return string(farmingStats)
 }
 
 func getMySunflowers() string {
 	urlFarmingStats := farmUrl + "/my-sunflowers"
-	farmingStats := api(urlFarmingStats, "POST", token, "", nil)
+	farmingStats := api(urlFarmingStats, "GET", token, "", nil)
 	//fmt.Println(string(buyTools))
 	return string(farmingStats)
 }
@@ -534,7 +540,7 @@ func getLeWallet() int {
 
 func buySunflowers(toolId int, cant int) string {
 	urlBuyTools := farmUrl + "/buy-sunflowers"
-	buyTools := api(urlBuyTools, "POST", token, `{"amount":`+strconv.Itoa(cant)+`,"toolId":`+strconv.Itoa(toolId)+`}`, nil)
+	buyTools := api(urlBuyTools, "POST", token, `{"amount":`+strconv.Itoa(cant)+`,"sunflowerId":`+strconv.Itoa(toolId)+`}`, nil)
 	return string(buyTools)
 }
 
