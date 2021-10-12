@@ -102,11 +102,27 @@ func mainLogic() bool {
 				utils.AddRandomSleep(7, 23)
 				applyToolSmallPot(plantId)
 			}
+
 			fixWater(plantId, needWater, stage)
 			fixWater(plantId, needWater, stage)
 			hasCrow := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".hasCrow").String()
 			fixCrow(plantId, hasCrow)
 			isTempPlant := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".isTempPlant").Bool()
+			hasPot := false
+			if !isTempPlant {
+				activeTools := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".activeTools")
+				countActiveTools := 0
+				activeTools.ForEach(func(key, value gjson.Result) bool {
+					if gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".activeTools."+strconv.Itoa(countActiveTools)+".id").Int() == 1 {
+						hasPot = true
+					}
+					countActiveTools += 1
+					return true
+				})
+				if !hasPot {
+					applyToolSmallPot(plantId)
+				}
+			}
 			//if stage == "cancelled" && totalHarvest != 0 {
 			if totalHarvest != 0 {
 				fmt.Println("Plant " + plantId + " needs to be harvested")
@@ -425,7 +441,7 @@ func Get2CaptchaSolution(urlGet2CaptchaSolution string) string {
 func applyToolWater(plantId string) bool {
 	hasTool := hasTool(3)
 	if !hasTool {
-		fmt.Print("Buying Water")
+		fmt.Println("Buying Water")
 		utils.AddRandomSleep(3, 7)
 		buyWater(1)
 	}
