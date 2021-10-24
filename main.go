@@ -97,30 +97,31 @@ func mainLogic() bool {
 			stage := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".stage").String()
 			totalHarvest := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".totalHarvest").Int()
 			needWater := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".needWater").String()
+			isTempPlant := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".isTempPlant").Bool()
 			if stage == "new" {
 				fmt.Println("Plant " + plantId + " is new and a new Pot needs to be added")
 				utils.AddRandomSleep(7, 23)
-				applyToolSmallPot(plantId)
+				if isTempPlant {
+					applyToolSmallPot(plantId)
+				}
 			}
-
 			fixWater(plantId, needWater, stage)
-			fixWater(plantId, needWater, stage)
+			//fixWater(plantId, needWater, stage)
 			hasCrow := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".hasCrow").String()
 			fixCrow(plantId, hasCrow)
-			isTempPlant := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".isTempPlant").Bool()
 			hasPot := false
 			if !isTempPlant {
 				activeTools := gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".activeTools")
 				countActiveTools := 0
 				activeTools.ForEach(func(key, value gjson.Result) bool {
-					if gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".activeTools."+strconv.Itoa(countActiveTools)+".id").Int() == 1 {
+					if gjson.Get(myFarm, "data."+strconv.Itoa(countPlants)+".activeTools."+strconv.Itoa(countActiveTools)+".id").Int() == 2 {
 						hasPot = true
 					}
 					countActiveTools += 1
 					return true
 				})
 				if !hasPot {
-					applyToolSmallPot(plantId)
+					applyToolBigPot(plantId)
 				}
 			}
 			//if stage == "cancelled" && totalHarvest != 0 {
@@ -473,28 +474,46 @@ func applyToolScareCrow(plantId string) bool {
 }
 
 func applyToolSmallPot(plantId string) bool {
-	hasTool := hasTool(1)
-	if !hasTool {
+	hasToolBool := hasTool(1)
+	if !hasToolBool {
 		fmt.Println("Buying a Small Pot")
 		utils.AddRandomSleep(3, 7)
 		buySmallPot(1)
 	}
-	utils.AddRandomSleep(3, 7)
-	if applyTool(plantId, 1, "") == true {
-		fmt.Println("The small pot has been added to plant" + plantId)
-		return true
+	hasToolBool = hasTool(1)
+	if hasToolBool {
+		utils.AddRandomSleep(3, 7)
+		if applyTool(plantId, 1, "") == true {
+			fmt.Println("The small pot has been added to plant" + plantId)
+			return true
+		} else {
+			fmt.Println("There was an error adding the small pot")
+			return false
+		}
 	} else {
-		fmt.Println("There was an error adding the small pot")
+		fmt.Println("There was an error adding the small pot. Couldn't buy")
 		return false
 	}
 }
-
 func applyToolBigPot(plantId string) bool {
-	if applyTool(plantId, 2, "") == true {
-		fmt.Println("The big pot has been added to plant" + plantId)
-		return true
+	hasToolBool := hasTool(2)
+	if !hasToolBool {
+		fmt.Println("Buying a Big Pot")
+		utils.AddRandomSleep(3, 7)
+		buyBigPot(1)
+	}
+	hasToolBool = hasTool(2)
+	if hasToolBool {
+		utils.AddRandomSleep(3, 7)
+		if applyTool(plantId, 2, "") == true {
+			fmt.Println("The big pot has been added to plant" + plantId)
+			return true
+		} else {
+			fmt.Println("There was an error adding the big pot")
+			return false
+		}
 	} else {
-		fmt.Println("There was an error adding the big pot")
+		fmt.Println("There was an error adding the big pot. Couldn't buy")
 		return false
 	}
 }
@@ -527,6 +546,15 @@ func buySmallPot(cant int) bool {
 	leWallet := getLeWallet()
 	if leWallet >= 50*cant {
 		buyTools(1, cant)
+		return true
+	} else {
+		return false
+	}
+}
+func buyBigPot(cant int) bool {
+	leWallet := getLeWallet()
+	if leWallet >= 100*cant {
+		buyTools(2, cant)
 		return true
 	} else {
 		return false
@@ -631,31 +659,34 @@ func getWorldTreeYesterdayReward() string {
 
 func doWorldTree() {
 	wolrdTreeData := getWorldTreeData()
-	yesterdayReward := gjson.Get(wolrdTreeData, "data.yesterdayReward").Bool()
-	if yesterdayReward {
-		getWorldTreeYesterdayReward()
-	}
-	myWater := gjson.Get(wolrdTreeData, "data.myWater").Int()
-	if myWater < 20 {
-		giveWatersWorldTree(20)
-		wolrdTreeData = getWorldTreeData()
-	}
-	rewardAvailable := gjson.Get(wolrdTreeData, "data.rewardAvailable").Bool()
-	totalWatersNow := gjson.Get(wolrdTreeData, "data.totalWater").String()
-	if rewardAvailable {
-		rewardIds := gjson.Get(wolrdTreeData, "data.reward.#.type")
-		rewardIds.ForEach(func(key, value gjson.Result) bool {
-			rewardStatus := gjson.Get(wolrdTreeData, "data.reward."+strconv.Itoa(int(value.Int())-1)+".status").String()
-			targetWaters := gjson.Get(wolrdTreeData, "data.reward."+strconv.Itoa(int(value.Int())-1)+".target").String()
-			if rewardStatus == "finish" {
-				getWorldTreeReward(int(value.Int()))
-			} else if rewardStatus == "notfinish" {
-				fmt.Println("Reward " + value.String() + " has not been finished yet. " + totalWatersNow + "/" + targetWaters)
-				return false
-			}
-			return true
-		})
+	if int(gjson.Get(wolrdTreeData, "status").Int()) == 0 {
+		yesterdayReward := gjson.Get(wolrdTreeData, "data.yesterdayReward").Bool()
+		if yesterdayReward {
+			getWorldTreeYesterdayReward()
+		}
+		myWater := gjson.Get(wolrdTreeData, "data.myWater").Int()
+		if myWater < 20 {
+			giveWatersWorldTree(20)
+			wolrdTreeData = getWorldTreeData()
+		}
 
+		rewardAvailable := gjson.Get(wolrdTreeData, "data.rewardAvailable").Bool()
+		totalWatersNow := gjson.Get(wolrdTreeData, "data.totalWater").String()
+		if rewardAvailable {
+			rewardIds := gjson.Get(wolrdTreeData, "data.reward.#.type")
+			rewardIds.ForEach(func(key, value gjson.Result) bool {
+				rewardStatus := gjson.Get(wolrdTreeData, "data.reward."+strconv.Itoa(int(value.Int())-1)+".status").String()
+				targetWaters := gjson.Get(wolrdTreeData, "data.reward."+strconv.Itoa(int(value.Int())-1)+".target").String()
+				if rewardStatus == "finish" {
+					getWorldTreeReward(int(value.Int()))
+				} else if rewardStatus == "notfinish" {
+					fmt.Println("Reward " + value.String() + " has not been finished yet. " + totalWatersNow + "/" + targetWaters)
+					return false
+				}
+				return true
+			})
+
+		}
 	}
 	//gjson.Get(wolrdTreeData, "data.totalWater").String()
 	//gjson.Get(wolrdTreeData, "data."+key.String()+".toolId").Int()
