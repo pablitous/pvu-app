@@ -142,7 +142,7 @@ func mainLogic() bool {
 			return true // keep iterating
 		})
 		checkFreeSpotsAndAddNewPlants()
-		doWorldTree()
+		//doWorldTree()
 		return true
 	} else {
 		const (
