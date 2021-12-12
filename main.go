@@ -398,7 +398,7 @@ func applyTool(farmId string, toolId int, captchaInfo string) bool {
 }
 func fixCaptcha() string {
 	var captchaSolution string
-	key2Captcha := "0865e8ccc6d546acc46ecff9f1b17ffc"
+	key2Captcha := "inset_here_api_key_2captcha"
 	urlNewCaptcha := farmUrl + "/captcha/register"
 	newCaptcha := api(urlNewCaptcha, "GET", token, "", nil)
 	if gjson.Get(newCaptcha, "status").Int() == 0 {
